@@ -6,7 +6,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { readJSON, writeJSON, ensureDir } = require('./utils');
-const neonDb = require('./neon'); // optional Neon sync (like the crasher bot)
+const neonDb = require('../database/neon'); // optional Neon sync (like the crasher bot)
 
 const PREMIUM_FILE  = path.resolve(__dirname, '../database/premium.json');
 const SESSIONS_DIR  = path.resolve(__dirname, '../sessions');
