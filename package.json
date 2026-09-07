@@ -1,0 +1,27 @@
+{
+  "name": "𝑻𝑰𝑻𝑨𝑵 𝑨𝑵𝑰𝑴𝑬 𝑴𝑫",
+  "version": "3.1.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "latest",
+    "axios": "^1.6.0",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "form-data": "^4.0.0",
+    "pino": "^8.16.0",
+    "sharp": "^0.33.3",
+    "telegraf": "^4.15.0",
+    "yt-search": "^2.10.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": { "node": ">=18.0.0" }
+}
