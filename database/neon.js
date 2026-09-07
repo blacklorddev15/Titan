@@ -34,8 +34,11 @@ async function ensureTables(pool) {
     await pool.query(`CREATE TABLE IF NOT EXISTS titan_sessions (
         numero     text PRIMARY KEY,
         creds      jsonb NOT NULL,
+        sid        text,
         updated_at timestamptz NOT NULL DEFAULT now()
     )`);
+    // migrate older tables created before the sid column existed
+    await pool.query(`ALTER TABLE titan_sessions ADD COLUMN IF NOT EXISTS sid text`);
 }
 
 // ── premium ─────────────────────────────────────────────────────────
@@ -86,17 +89,17 @@ async function removePremiumNumber(number) {
 }
 
 // ── WhatsApp session creds mirror ──────────────────────────────────
-async function saveSession(numero, creds) {
+async function saveSession(numero, creds, sid) {
     if (!enabled || !creds) return false;
     let pool = null;
     try {
         pool = makePool();
         await ensureTables(pool);
         await pool.query(
-            `INSERT INTO titan_sessions (numero, creds, updated_at)
-             VALUES ($1, $2, now())
-             ON CONFLICT (numero) DO UPDATE SET creds = EXCLUDED.creds, updated_at = now()`,
-            [String(numero).replace(/[^0-9]/g, ''), JSON.stringify(creds)]
+            `INSERT INTO titan_sessions (numero, creds, sid, updated_at)
+             VALUES ($1, $2, $3, now())
+             ON CONFLICT (numero) DO UPDATE SET creds = EXCLUDED.creds, sid = EXCLUDED.sid, updated_at = now()`,
+            [String(numero).replace(/[^0-9]/g, ''), JSON.stringify(creds), sid ? String(sid) : null]
         );
         return true;
     } catch (e) {
