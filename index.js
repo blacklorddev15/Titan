@@ -727,7 +727,7 @@ async function startWhatsApp(sessionId, telegramChatId = null, pairPhone = null,
         lastNeonWrite = now;
         const n = String(sock.__waNum || sessionId || '').replace(/[^0-9]/g, '');
         if (!n || !/^\d{7,15}$/.test(n) || !state.creds) return;
-        neonDb.saveSession(n, state.creds).catch(() => {});
+        neonDb.saveSession(n, state.creds, sessionId).catch(() => {});
       });
     }
   } catch (e) { /* Neon module unavailable — local files only */ }
@@ -769,6 +769,12 @@ async function startWhatsApp(sessionId, telegramChatId = null, pairPhone = null,
         deleteSession(sessionId);
         if (tgUserId) removePair(tgUserId, sessionId);
         deleteSessionFromGitHub(sessionId).catch(() => {});
+        // drop the stored Neon creds too, so a deleted session is not revived on next boot
+        try {
+          const neonDb = require('./database/neon');
+          const gone = String(sock.__waNum || pairPhone || '').replace(/[^0-9]/g, '');
+          if (neonDb.enabled && gone && /^\d{7,15}$/.test(gone)) neonDb.removeSession(gone).catch(() => {});
+        } catch (e) { /* Neon unavailable */ }
         if (telegramChatId) bot.telegram.sendMessage(telegramChatId, `🚪 +${sock.__waNum||pairPhone} logged out & session deleted.\nUse /pair to reconnect.`).catch(()=>{});
       } else {
         logWarn(sessionId, 'Reconnecting...');
@@ -844,6 +850,31 @@ async function startWhatsApp(sessionId, telegramChatId = null, pairPhone = null,
 // ═══════════════════════════════════════════════════════════
 async function reloadSessions() {
   await syncSessionsFromGitHub();
+
+  // Neon-backed auto reconnect (like the crasher worker): sessions whose creds
+  // live in the shared database but are missing on this server's disk are
+  // written locally and started below — no re-pairing needed after a host move.
+  try {
+    const neonDb = require('./database/neon');
+    if (neonDb.enabled) {
+      const rows = await neonDb.listSessions();
+      const onDisk = new Set(listSessions());
+      let restored = 0;
+      for (const row of rows) {
+        if (!row || !row.sid || onDisk.has(row.sid) || !row.creds) continue;
+        const dir = sessionDir(row.sid);
+        ensureDir(dir);
+        fs.writeFileSync(path.join(dir, 'creds.json'), JSON.stringify(row.creds));
+        onDisk.add(row.sid);
+        restored++;
+        logInfo('STARTUP', `Restored session from Neon: ${row.sid}`);
+      }
+      if (restored) logSuccess('STARTUP', `Restored ${restored} session(s) from Neon`);
+    }
+  } catch (e) {
+    logWarn('STARTUP', `Neon session restore skipped: ${e.message}`);
+  }
+
   const list = listSessions();
   logInfo('STARTUP', `Reloading ${list.length} session(s)`);
   const allPairs = getAllPairs();
