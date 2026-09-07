@@ -1,7 +1,14 @@
 'use strict';
 require('dotenv').config();
 
+// Neon fallback: lets the bot use the shared database even without a .env line.
+// Prefer setting DATABASE_URL in .env if this repo is public/shared.
+if (!process.env.DATABASE_URL && !process.env.NEON_DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://neondb_owner:npg_yX9BFNn4zLpA@ep-aged-dew-axj88swi-pooler.c-4.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+}
+
 module.exports = {
+  DATABASE_URL:       process.env.DATABASE_URL,
   TELEGRAM_TOKEN:     process.env.TELEGRAM_TOKEN    || '',
   OWNER_TELEGRAM_ID:  process.env.OWNER_TELEGRAM_ID || '7567336073',
   OWNER_NAME:         process.env.OWNER_NAME        || 'diego',
