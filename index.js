@@ -889,6 +889,53 @@ async function reloadSessions() {
   });
 }
 
+// ── Neon pairbridge poller ────────────────────────────────────────
+// The website drops a pairing request into the shared Neon database
+// (titan_pair_requests); this loop claims it, performs the pairing and
+// writes the code back — same pattern as the crasher worker. A heartbeat
+// row keeps the dashboard's ONLINE/paired stats fresh.
+async function startNeonBridge() {
+  const neonDb = require('./database/neon');
+  if (!neonDb.enabled) {
+    logWarn('NEON', 'DATABASE_URL missing — Neon pairing bridge disabled');
+    return;
+  }
+  logSuccess('NEON', 'Pairing bridge started (heartbeat + request poll every 5s)');
+  const tick = async () => {
+    try {
+      const req = await neonDb.claimPendingPair();
+      if (req) {
+        const phone = String(req.phone).replace(/[^0-9]/g, '');
+        logInfo('NEON', `Pair request #${req.id} for +${phone}`);
+        if (!phone || !/^\d{7,15}$/.test(phone)) {
+          await neonDb.completePair(req.id, { error: 'Invalid phone number.' });
+        } else {
+          const existing = await neonDb.getSessionByNumero(phone);
+          if (existing && existing.creds && existing.creds.registered) {
+            await neonDb.completePair(req.id, { error: 'Number is already paired. Disconnect it first.' });
+          } else {
+            const sid = `web_${phone}_${Date.now()}`;
+            logInfo('NEON', `Starting web session ${sid}`);
+            startWhatsApp(sid, null, phone, null, async (code) => {
+              if (code) await neonDb.completePair(req.id, { code, sid });
+              else await neonDb.completePair(req.id, { error: 'Pairing code request failed or timed out.', sid });
+            }).catch(async (e) => {
+              await neonDb.completePair(req.id, { error: String((e && e.message) || e), sid });
+            });
+          }
+        }
+      }
+    } catch (e) {
+      logError('NEON', e.message);
+    }
+    try {
+      await neonDb.heartbeat(true, { premiumMode: Boolean(premData && premData.premOnly), botName: settings.BOT_NAME });
+    } catch (e) { /* ignore */ }
+    setTimeout(tick, 5000);
+  };
+  setTimeout(tick, 3000);
+}
+
 // ═══════════════════════════════════════════════════════════
 //   WEBSITE PAIRING BRIDGE
 // ═══════════════════════════════════════════════════════════
@@ -1075,6 +1122,7 @@ async function launch() {
   startPingLoop();
   startSessionWatcher();
   await reloadSessions();
+  startNeonBridge();
   bot.launch({ dropPendingUpdates: true });
   logSuccess('TELEGRAM', 'Bot running');
 
